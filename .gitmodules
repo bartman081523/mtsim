@@ -1,0 +1,15 @@
+[submodule "external/lera_spindle"]
+	path = external/lera_spindle
+	url = https://github.com/manulera/simulationsLeraRamirez2021.git
+[submodule "external/kmc_motub"]
+	path = external/kmc_motub
+	url = https://github.com/WilliamLec/kMC_MoTub.git
+[submodule "external/vcell"]
+	path = external/vcell
+	url = https://github.com/virtualcell/vcell.git
+[submodule "external/four_state_mt"]
+	path = external/four_state_mt
+	url = https://github.com/ngudimchuk/Four_State_MT_model.git
+[submodule "external/mt_quantum"]
+	path = external/mt_quantum
+	url = https://github.com/TheonlyqueenAC/Microtubule_Simulation.git
