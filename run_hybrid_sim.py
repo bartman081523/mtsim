@@ -1,51 +1,42 @@
-# file: run_hybrid_sim.py
-import numpy as np
-from pathlib import Path
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-# --- Imports aus externen Repos (leichte Adapter liegen in ./adapters)
-from adapters.mt_spindle import MTSpindleSystem
-from adapters.kmc_motors import MotorLattice
-from modules.photonic import PhotonicEmitter
-from modules.spin_ros import SpinROS
-from modules.detector import Detector
+import argparse
+from mt_upe_core import simulate_hybrid_avg
 
-def run_scenario(curvature, mode, loss_mm=10, r_um=50):
-    # 1) Zellsystem (MT + Spindel)
-    mt = MTSpindleSystem(n_mt=9, length_um=3.0)     # aus Lera-Ramírez inspiriert
-    motors = MotorLattice(mt_graph=mt.graph)        # aus kMC_MoTub inspiriert
+try:
+    from tqdm import tqdm
+except Exception:
+    def tqdm(x, **kw): return x
 
-    # 2) Photonik/Spin-Module
-    phot = PhotonicEmitter(cluster_size=50, n_clusters=20, mode=mode, curvature=curvature)
-    spin  = SpinROS(curvature=curvature)
+def main():
+    ap = argparse.ArgumentParser(description="Hybrid-Einzelsim (HYP vs ANT) mit Peak-Gating")
+    ap.add_argument("--curvature", type=float, default=1.0)
+    ap.add_argument("--loss-mm", type=float, default=10.0)
+    ap.add_argument("--r-um", type=float, default=50.0)
+    ap.add_argument("--trials", type=int, default=8)
+    ap.add_argument("--seed", type=int, default=1234)
+    ap.add_argument("--win-ns", type=float, default=0.5, help="Gate-Breite in ns (sub-ns möglich)")
+    ap.add_argument("--deadtime-ns", type=float, default=0.0)
+    ap.add_argument("--afterpulse", type=float, default=0.0)
+    ap.add_argument("--qe", type=float, default=0.7)
+    ap.add_argument("--eta-geom", type=float, default=0.2)
+    ap.add_argument("--dark-cps", type=float, default=50.0)
+    ap.add_argument("--emission-scale", type=float, default=1.0)
+    args = ap.parse_args()
 
-    # 3) Simulationsschritte
-    dt = 1e-12; T = 5e-9; time = np.arange(0, T, dt)
-    I_t = phot.emit(time)                            # UPE-Zeitverlauf (incoh vs SR)
-    motors.step_series(I_t)                          # Kopplung: Photonfeld -> Motorbias
-    mt.update_dynamics(dt_series=time*0+dt)          # ggf. DI-Raten (portiert aus 4-state)
+    win_s = args.win_ns * 1e-9
+    ds = args.deadtime_ns * 1e-9
 
-    # 4) Detektor/SNR
-    det = Detector(QE=0.6, eta_geom=0.1, mu_eff_mm=loss_mm, r_um=r_um, dark=100, window=1e-7)
-    N_emit = phot.total_photons(I_t, time)
-    N_det, snr = det.measure(N_emit)
-
-    # 5) Outputs
-    return {
-        "mode": mode,
-        "curvature": curvature,
-        "loss_mm": loss_mm,
-        "distance_um": r_um,
-        "emit_photons": float(N_emit),
-        "det_photons": float(N_det),
-        "snr": float(snr),
-        "motor_net_steps": int(motors.net_displacement()),
-        "photon_peak": float(I_t.max()),
-        "cilia_phase_reset": float(phot.phase_reset(I_t)),
-        "spindle_metric": float(mt.spindle_metric(spin.modulator()))
-    }
+    for mode in ["hypothesis","antithesis"]:
+        res = simulate_hybrid_avg(
+            curvature=args.curvature, mode=mode, loss_mm=args.loss_mm, r_um=args.r_um,
+            trials=args.trials, base_seed=args.seed, window_s=win_s, deadtime_s=ds,
+            afterpulse=args.afterpulse, qe=args.qe, eta_geom=args.eta_geom,
+            dark_cps=args.dark_cps, emission_scale=args.emission_scale,
+            pbar=tqdm
+        )
+        print(res)
 
 if __name__ == "__main__":
-    for mode in ["hypothesis","antithesis"]:
-        for kappa in [0.0,0.5,1.0]:
-            res = run_scenario(curvature=kappa, mode=mode, loss_mm=10, r_um=50)
-            print(res)
+    main()
