@@ -77,39 +77,72 @@ python run_hybrid_sim.py --curvature 1.0 --loss-mm 10.0 --r-um 50.0 --trials 8
 - `--loss-mm`: Attenuation length in mm (default: 10.0)
 - `--r-um`: Detection distance in micrometers (default: 50.0)
 - `--trials`: Number of simulation trials for averaging (default: 8)
+- `--seed`: Random seed for reproducibility (default: 1234)
 - `--win-ns`: Gate window width in nanoseconds (default: 0.5)
+- `--deadtime-ns`: Detector deadtime in nanoseconds (default: 0.0)
+- `--afterpulse`: Afterpulse probability (default: 0.0)
 - `--qe`: Quantum efficiency (default: 0.7)
+- `--eta-geom`: Geometric collection efficiency (default: 0.2)
 - `--dark-cps`: Dark count rate in counts/second (default: 50.0)
+- `--emission-scale`: Emission scaling factor (default: 1.0)
 
 ### Parameter Sweeps
 
 Explore parameter space systematically:
 
 ```bash
-python run_param_sweep.py --input sweep_controls.csv --output results.csv
+python run_param_sweep.py --preset sweetspot --out results.csv
 ```
 
-**Available sweep configurations:**
-- `sweep_controls.csv`: Basic parameter validation
-- `sweep_detector_QE06_dark20.csv`: Detector performance at QE=0.6, 20 cps dark
-- `sweep_detector_QE08_dark100.csv`: High-performance detector characterization
-- `sweep_distance_fine.csv`: Fine-grained distance dependence
-- `sweep_losses.csv`: Attenuation length optimization
-- `sweep_sweetspot.csv`: Multi-parameter optimization
+**Parameters:**
+- `--preset`: Choose parameter preset ("default" or "sweetspot")
+- `--curvatures`: Comma-separated curvature values (e.g., "0.5,1.0,1.5")
+- `--losses`: Comma-separated loss values in mm⁻¹ (e.g., "5,10,30")
+- `--distances`: Comma-separated distances in μm (e.g., "10,50,100")
+- `--trials`: Number of simulation trials (default: 16)
+- `--seed`: Random seed for reproducibility (default: 1000)
+- `--window-ns`: Gate window width in nanoseconds (default: 0.5)
+- `--optimize-window`: Comma-separated window values for optimization
+- `--deadtime-ns`: Detector deadtime in nanoseconds (default: 0.0)
+- `--afterpulse`: Afterpulse probability (default: 0.0)
+- `--qe`: Quantum efficiency (default: 0.6)
+- `--eta-geom`: Geometric collection efficiency (default: 0.1)
+- `--dark-cps`: Dark count rate in counts/second (default: 100.0)
+- `--emission-scale`: Emission scaling factor (default: 1.0)
+- `--out`: Output CSV filename (default: "param_sweep_results.csv")
+- `--no-header`: Skip CSV header when appending to existing file
 
 ### Network Simulations
 
 Study collective effects in emitter networks:
 
 ```bash
-python run_network_sweep.py --input sweep_network.csv --output network_results.csv
+python run_network_sweep.py --preset sweetspot --out network_results.csv
 ```
 
-**Network configurations:**
-- `sweep_network.csv`: General network topologies
-- `sweep_network_bioish.csv`: Biologically-inspired parameters
-- `sweep_network_compact.csv`: High-density networks
-- `sweep_network_khet.csv`: Strong coupling regimes
+**Parameters:**
+- `--preset`: Choose parameter preset ("default" or "sweetspot")
+- `--N`: Number of network nodes (default: 12)
+- `--node-radius-um`: Node radius in micrometers (default: 12.0)
+- `--det-pos-um`: Detector position as "x,y,z" in μm (default: "0,0,20")
+- `--curvatures`: Comma-separated curvature values (default: "0.5,1.0")
+- `--losses`: Comma-separated loss values in mm⁻¹ (default: "5,10,30")
+- `--alphas`: Comma-separated alpha coupling values (default: "0.1,0.3")
+- `--ells-um`: Comma-separated correlation lengths in μm (default: "8,12")
+- `--trials`: Number of simulation trials (default: 12)
+- `--seed`: Random seed for reproducibility (default: 1000)
+- `--window-ns`: Gate window width in nanoseconds (default: 0.5)
+- `--optimize-window`: Comma-separated window values for optimization
+- `--deadtime-ns`: Detector deadtime in nanoseconds (default: 0.0)
+- `--afterpulse`: Afterpulse probability (default: 0.0)
+- `--qe`: Quantum efficiency (default: 0.6)
+- `--eta-geom`: Geometric collection efficiency (default: 0.1)
+- `--dark-cps`: Dark count rate in counts/second (default: 100.0)
+- `--kappa-sigma`: Curvature deviation parameter (default: 0.0)
+- `--emission-scale`: Emission scaling factor (default: 1.0)
+- `--prc-eps`: PRC coupling strength (default: 0.2)
+- `--out`: Output CSV filename (default: "sweep_network.csv")
+- `--no-header`: Skip CSV header when appending to existing file
 
 ## File Structure
 
