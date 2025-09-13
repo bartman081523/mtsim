@@ -50,16 +50,16 @@ ehthumbs.db
 Thumbs.db
 
 # Simulation outputs
-results_*.csv
-output_*.csv
-temp_*.csv
+#results_*.csv
+#output_*.csv
+#temp_*.csv
 *.png
 *.pdf
 *.eps
 
 # External repositories (from setup.sh)
-mt_hybrid/
-external/
+#mt_hybrid/
+#external/
 
 # Temporary files
 /tmp/

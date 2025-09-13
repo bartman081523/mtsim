@@ -120,6 +120,13 @@ def photons_in_time_gate_window(I: np.ndarray, t: np.ndarray, t0: float, t1: flo
     E_gate = float(np.trapezoid(I[mask], t[mask]))
     return E_gate / E_PHOTON
 
+# =================== Shot Noise / Darkcounts ===================
+
+def _poissonize_counts(N_sig: float, dark_cps: float, window_s: float, rng: np.random.Generator) -> float:
+    """Ziehe photon shot noise + Darkcounts als Poisson-Zufallszahlen (ganze Zählungen)."""
+    lam_sig  = max(N_sig, 0.0)
+    lam_dark = max(dark_cps*window_s, 0.0)
+    return float(rng.poisson(lam_sig) + rng.poisson(lam_dark))
 
 # =================== Spin/ROS ===================
 
@@ -129,7 +136,6 @@ class SpinROS:
         self.T2 = T2_base * (1 + float(curvature))
     def modulator(self, B: float = 1e-6, t: float = 1e-9) -> float:
         return 0.5 * (1 + np.cos(GAMMA_E*B*t) * np.exp(-t/self.T2))
-
 
 # =================== 4-State MT/Spindel ===================
 
@@ -175,7 +181,6 @@ class MTSpindleSystem:
         self._last_sum = total
         return float(dL)
 
-
 # =================== Motoren (Proxy) ===================
 
 class MotorLattice:
@@ -187,7 +192,6 @@ class MotorLattice:
             p_fwd = min(max(p_fwd, 0.0), 1.0)
             self.pos += 1 if np.random.rand() < p_fwd else -1
     def net_displacement(self) -> int: return int(self.pos)
-
 
 # =================== Detektor ===================
 
@@ -216,20 +220,20 @@ class Detector:
         var_eff = N_det + self.dark*self.win + afterpulse*max(N_det, 0.0)
         return float(N_det / np.sqrt(max(var_eff, 1e-30)))
 
-
 # =================== Hybrid-Einzelsimulation ===================
 
 def simulate_hybrid_once(
     curvature: float, mode: str, loss_mm: float, r_um: float, seed: int,
     window_s: float, deadtime_s: float, afterpulse: float,
     qe: float, eta_geom: float, dark_cps: float, emission_scale: float,
-    dt: float = DT_DEFAULT, T: float = T_DEFAULT
+    dt: float = DT_DEFAULT, T: float = T_DEFAULT,
+    poissonize: bool = False
 ) -> Dict[str, float]:
-    np.random.seed(seed)
+    rng = np.random.default_rng(seed)
     time = np.arange(0, T, dt)
 
     phot = PhotonicEmitter(cluster_size=50, n_clusters=20, mode=mode,
-                           curvature=curvature, emission_scale=emission_scale)
+                           curvature=curvature, emission_scale=emission_scale, rng=rng)
     spin = SpinROS(curvature=curvature)
     mt = MTSpindleSystem(n_mt=9, length_um=3.0, seed=seed)
     motors = MotorLattice()
@@ -247,10 +251,16 @@ def simulate_hybrid_once(
     sharp = peak_sharpness(I_t)
     p2r = peak_to_rms(I_t)
 
-    # Detektion (nur Gate-Photonen)
-    N_det = det.measure_counts_distance(N_emit_gate, r_um)
-    N_det = Detector.apply_deadtime_afterpulse(N_det, window_s, deadtime_s, afterpulse)
-    snr = det.snr_from_counts(N_det, afterpulse)
+    # Detektion (nur Gate)
+    N_det_mean = det.measure_counts_distance(N_emit_gate, r_um)
+    N_det_mean = Detector.apply_deadtime_afterpulse(N_det_mean, window_s, deadtime_s, afterpulse)
+
+    if poissonize:
+        N_det_out = _poissonize_counts(N_det_mean, dark_cps, window_s, rng)
+        snr = det.snr_from_counts(N_det_out, afterpulse)
+    else:
+        N_det_out = N_det_mean
+        snr = det.snr_from_counts(N_det_out, afterpulse)
 
     return {
         "mode": mode,
@@ -263,7 +273,7 @@ def simulate_hybrid_once(
         "peak_sharpness": float(sharp),
         "p2rms": float(p2r),
 
-        "det_photons": float(N_det),
+        "det_photons": float(N_det_out),
         "snr": float(snr),
 
         "motor_net_steps": motors.net_displacement(),
@@ -276,7 +286,9 @@ def simulate_hybrid_avg(
     curvature: float, mode: str, loss_mm: float, r_um: float, trials: int, base_seed: int,
     window_s: float, deadtime_s: float, afterpulse: float,
     qe: float, eta_geom: float, dark_cps: float, emission_scale: float,
-    pbar: Optional[Callable[[Iterable], Iterable]] = None
+    poissonize: bool = False,
+    pbar: Optional[Callable[[Iterable], Iterable]] = None,
+    dt: float = DT_DEFAULT, T: float = T_DEFAULT
 ) -> Dict[str, float]:
     assert trials > 0
     rows=[]; it=range(trials)
@@ -287,7 +299,7 @@ def simulate_hybrid_avg(
         seed = base_seed + i
         rows.append(simulate_hybrid_once(
             curvature, mode, loss_mm, r_um, seed, window_s, deadtime_s, afterpulse,
-            qe, eta_geom, dark_cps, emission_scale
+            qe, eta_geom, dark_cps, emission_scale, dt=dt, T=T, poissonize=poissonize
         ))
     meta = {"mode","curvature","loss_mm","distance_um"}
     out = {"trials": trials}
@@ -298,7 +310,6 @@ def simulate_hybrid_avg(
         out[k+"_mean"] = float(arr.mean())
         out[k+"_sem"]  = float(arr.std(ddof=1)/np.sqrt(trials)) if trials>1 else 0.0
     return out
-
 
 # =================== Netzwerk-Tools ===================
 
@@ -328,7 +339,6 @@ def kuramoto_R(phi: np.ndarray) -> float:
     z = np.exp(1j*phi)
     return float(np.abs(np.mean(z)))
 
-
 # =================== Netzwerk-Simulation ===================
 
 def simulate_network_once(
@@ -336,7 +346,7 @@ def simulate_network_once(
     det_pos_um: Tuple[float,float,float], node_radius_um: float,
     alpha: float, ell_um: float, window_s: float, deadtime_s: float, afterpulse: float,
     qe: float, eta_geom: float, dark_cps: float, kappa_sigma: float, seed: int,
-    emission_scale: float, prc_eps: float = 0.2,
+    emission_scale: float, prc_eps: float = 0.2, prc_threshold: float = 0.0,
     dt: float = DT_DEFAULT, T: float = T_DEFAULT
 ) -> Dict[str, float]:
     rng = np.random.default_rng(seed)
@@ -391,20 +401,24 @@ def simulate_network_once(
     N_det_gate_eff = Detector.apply_deadtime_afterpulse(N_det_gate, window_s, deadtime_s, afterpulse)
     snr = det.snr_from_counts(N_det_gate_eff, afterpulse)
 
-    # PRC / Synchronisation
+    # PRC / Synchronisation – optional durch "Spitzigkeit" getriggert
     phi0 = rng.uniform(0, 2*np.pi, size=N)
     R_before = kuramoto_R(phi0)
-    Ipeak_nodes = I_net.max(axis=1)
-    Ipeak_norm = Ipeak_nodes / (Ipeak_nodes.max() + 1e-30)
-    dphi = prc_delta_phi(phi0, Ipeak_norm, eps=prc_eps, phi0=0.0)
+    sharp = peak_sharpness(I_det_sum)
+    p2r = peak_to_rms(I_det_sum)
+
+    if prc_threshold <= 0.0 or p2r >= prc_threshold:
+        # Node-peak-basiert (wie bisher): stärkere Nodes erhalten stärkere Reset-Kicks
+        Ipeak_nodes = I_net.max(axis=1)
+        Ipeak_norm = Ipeak_nodes / (Ipeak_nodes.max() + 1e-30)
+        dphi = prc_delta_phi(phi0, Ipeak_norm, eps=prc_eps, phi0=0.0)
+    else:
+        dphi = np.zeros_like(phi0)
+
     phi1 = (phi0 + dphi) % (2*np.pi)
     R_after = kuramoto_R(phi1)
     sync_gain = R_after - R_before
     mean_phase_reset = float(np.mean(np.abs(dphi)))
-
-    # Diagnostik: Schärfe der Summenwelle am Detektor
-    sharp = peak_sharpness(I_det_sum)
-    p2r = peak_to_rms(I_det_sum)
 
     # Diagnose: volle Emission gesamt
     emit_photons_total = float(np.sum(N_emit_nodes_total))
@@ -424,8 +438,8 @@ def simulate_network_once(
         "kappa_sigma": float(kappa_sigma),
 
         "emit_photons_total": emit_photons_total,
-        "det_photons_total": det_photons_total,      # total über die ganze Zeit
-        "gate_photons": float(N_det_gate),           # detektierte Gate-Photonen
+        "det_photons_total": det_photons_total,
+        "gate_photons": float(N_det_gate),
         "coincidence_ratio": float(coincidence_ratio),
         "peak_sharpness": float(sharp),
         "p2rms": float(p2r),
@@ -442,7 +456,8 @@ def simulate_network_avg(
     node_radius_um: float, alpha: float, ell_um: float, trials: int, base_seed: int,
     window_s: float, deadtime_s: float, afterpulse: float,
     qe: float, eta_geom: float, dark_cps: float, kappa_sigma: float, emission_scale: float,
-    pbar: Optional[Callable[[Iterable], Iterable]] = None, prc_eps: float = 0.2
+    pbar: Optional[Callable[[Iterable], Iterable]] = None, prc_eps: float = 0.2, prc_threshold: float = 0.0,
+    dt: float = DT_DEFAULT, T: float = T_DEFAULT
 ) -> Dict[str, float]:
     assert trials > 0
     rows=[]; it=range(trials)
@@ -454,7 +469,8 @@ def simulate_network_avg(
         rows.append(simulate_network_once(
             N, curvature, mode, loss_mm, det_pos_um, node_radius_um,
             alpha, ell_um, window_s, deadtime_s, afterpulse,
-            qe, eta_geom, dark_cps, kappa_sigma, seed, emission_scale, prc_eps=prc_eps
+            qe, eta_geom, dark_cps, kappa_sigma, seed, emission_scale,
+            prc_eps=prc_eps, prc_threshold=prc_threshold, dt=dt, T=T
         ))
     meta = {"mode","N","curvature","loss_mm","alpha","ell_um",
             "det_x_um","det_y_um","det_z_um","node_radius_um","kappa_sigma"}
