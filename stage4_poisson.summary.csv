@@ -1,0 +1,4 @@
+name,auc,auc_boot_mean,auc_ci_lo,auc_ci_hi,threshold,tpr_at_thr,fpr_at_thr,youden_J,roc_csv
+score,1.0,0.995,1.0,1.0,13.238160408947463,1.0,0.0,1.0,stage4_poisson.roc_score.csv
+deltaR,1.0,0.995,0.9999999999999999,1.0,0.2702061177700247,1.0,0.0,1.0,stage4_poisson.roc_deltaR.csv
+combo,1.0,0.995,0.9999999999999999,1.0,1.8426812685144673,1.0,0.0,1.0,stage4_poisson.roc_combo.csv

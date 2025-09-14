@@ -53,7 +53,7 @@ Thumbs.db
 #results_*.csv
 #output_*.csv
 #temp_*.csv
-*.png
+#*.png
 *.pdf
 *.eps
 
